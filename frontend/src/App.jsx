@@ -10,7 +10,7 @@ import { EmptyState, Alert } from './components/ui';
 import { checkHealth, uploadAudioFiles, runComparison, getResults } from './services/api';
 import { fileEntryKey } from './constants/sttLanguages';
 
-const POLL_INTERVAL = 2500;
+const POLL_INTERVAL = 1000; // Check every 1 second for faster response, start aggressive then back off
 
 function getStatusLabel(job, running) {
   if (running) return 'Processing';

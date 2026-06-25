@@ -214,11 +214,9 @@ def job_to_response(job: ComparisonJob) -> JobResponse:
     result = None
     if job.result:
         provider_result = ProviderResult(**job.result)
-        # Extract the analysis from provider result
-        if provider_result.analysis:
-            result = sanitize_provider_result_for_client(provider_result.analysis)
-        else:
-            result = provider_result.analysis if provider_result.status == "completed" else None
+        # Extract the analysis from provider result (already an AnalysisResult)
+        if provider_result.analysis and provider_result.status == "completed":
+            result = provider_result.analysis
 
     ready = result is not None
 

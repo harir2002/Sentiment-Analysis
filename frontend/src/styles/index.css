@@ -760,6 +760,13 @@ input:focus-visible,
   margin-top: 0.35rem;
 }
 
+.processing-elapsed {
+  font-size: 0.8rem;
+  color: var(--color-accent);
+  margin-top: 0.5rem;
+  font-weight: 500;
+}
+
 /* ——— Results ——— */
 
 .results-layout {

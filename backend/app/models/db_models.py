@@ -13,7 +13,8 @@ class ComparisonJob(Base):
     audio_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     call_reference: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stt_language_code: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    results: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Single result for production
+    results: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # Old: kept for backward compatibility
     ranking: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

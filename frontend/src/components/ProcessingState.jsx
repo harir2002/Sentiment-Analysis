@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { ProgressSteps, SkeletonGroup } from './ui';
 
 const STEPS = [
@@ -18,6 +19,14 @@ export function getProcessingStepIndex({ uploadStatus, job, running }) {
   return running ? 1 : 0;
 }
 
+function formatElapsedTime(seconds) {
+  if (!seconds) return '';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
 export default function ProcessingState({
   uploadStatus,
   job,
@@ -26,7 +35,20 @@ export default function ProcessingState({
   completedBatchCount,
   batchTotal,
 }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    if (!running && !job) return;
+
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [running, job]);
+
   const stepIndex = getProcessingStepIndex({ uploadStatus, job, running });
+  const elapsedDisplay = formatElapsedTime(elapsedSeconds);
 
   return (
     <div className="processing-state">
@@ -38,6 +60,9 @@ export default function ProcessingState({
               ? `Processing ${batchTotal} call recordings…`
               : 'Processing your call recording…')}
         </p>
+        <p className="processing-elapsed">
+          {elapsedDisplay && `Elapsed time: ${elapsedDisplay}`}
+        </p>
         {multiFile && (
           <p className="processing-hint">
             {completedBatchCount} of {batchTotal} analyses complete
@@ -45,7 +70,12 @@ export default function ProcessingState({
         )}
         {(job?.pending_providers ?? 0) > 0 && (
           <p className="processing-hint">
-            Transcription in progress — this may take a few minutes for longer calls.
+            Transcription in progress — this may take several minutes for longer calls.
+          </p>
+        )}
+        {running && !job && (
+          <p className="processing-hint">
+            Starting analysis — connecting to AI services…
           </p>
         )}
         <SkeletonGroup />

@@ -281,15 +281,14 @@ async def _update_sarvam_providers(
         else:
             job.status = "failed"
 
-        if _all_providers_completed(scored) and settings.cleanup_audio_after_job and job.audio_path:
+        if _all_providers_completed(results) and settings.cleanup_audio_after_job and job.audio_path:
             delete_audio_file(job.audio_path)
             job.audio_path = None
 
         await db.commit()
         logger.info(
-            "Updated comparison job %s (Sarvam STT status=%s, pending=%s, detected_language=%s)",
+            "Updated comparison job %s (Sarvam STT status=%s, detected_language=%s)",
             comparison_job_id,
             stt_status,
-            pending,
             job.stt_language_code,
         )
