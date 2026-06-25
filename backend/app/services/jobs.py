@@ -220,6 +220,15 @@ async def run_job_background(job_id: str):
                 logger.warning("   Background worker will complete STT batch and LLM analysis")
                 logger.warning("=" * 80)
                 await _save_job_results(db, job, result, audio_path)
+                
+                # Schedule background batch worker to poll and complete the job
+                if result.sarvam_batch_job_id:
+                    from app.services.sarvam_batch_worker import schedule_sarvam_batch_followups
+                    logger.info("🔄 Scheduling background batch worker...")
+                    await schedule_sarvam_batch_followups(job_id, audio_path, [result])
+                    logger.info("✅ Background batch worker scheduled")
+                else:
+                    logger.warning("⚠️  No batch job ID found - batch worker not scheduled")
 
         except Exception as e:
             total_elapsed = time.perf_counter() - job_start_time
