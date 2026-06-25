@@ -32,13 +32,21 @@ async def create_job(
         raise ValueError("Uploaded audio file not found")
 
     validate_audio_file(audio_path)
+    
+    # Use filename as call_reference if not explicitly provided
+    filename_for_ref = original_filename or file_id
+    # Remove extension for cleaner reference
+    if filename_for_ref and '.' in filename_for_ref:
+        filename_for_ref = filename_for_ref.rsplit('.', 1)[0]
+    
+    resolved_call_reference = call_reference or filename_for_ref
 
     job = ComparisonJob(
         id=str(uuid.uuid4()),
         status=JobStatus.PENDING.value,
         audio_filename=original_filename or file_id,
         audio_path=audio_path,
-        call_reference=call_reference,
+        call_reference=resolved_call_reference,
         stt_language_code=None,
     )
     db.add(job)
