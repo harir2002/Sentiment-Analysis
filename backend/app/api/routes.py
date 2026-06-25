@@ -306,10 +306,14 @@ async def sync_results_to_odoo(
     if not response.result:
         raise HTTPException(status_code=400, detail="No analysis data available")
     
-    # Sync to Odoo
+    # Extract transcript from job.result dict (not response.result pydantic object)
+    result_dict = job.result if isinstance(job.result, dict) else job.result
+    transcript = result_dict.get('transcript', '') if isinstance(result_dict, dict) else ''
+    
+    # Sync to Odoo - response.result is AnalysisResult pydantic object
     crm_sync = await sync_to_odoo(
         call_reference=job.call_reference or job.id,
-        transcript=response.result.get('transcript') or '',
+        transcript=transcript,
         analysis=response.result,
         customer_phone=None,
         customer_email=None,
