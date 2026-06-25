@@ -254,6 +254,7 @@ async def _update_sarvam_providers(
                     result.total_runtime_seconds = (
                         result.stt_runtime_seconds + result.llm_runtime_seconds
                     )
+                    result.status = "completed"
                     
                     logger.info("[██████████████████████] 100% - Analysis Complete! (LLM took %.1fs)", llm_elapsed)
                     logger.info("✅ Results:")
