@@ -52,6 +52,7 @@ class OdooCRMClient:
             }
         """
         if not self.is_configured():
+            logger.warning("⚠️  Odoo CRM not configured - sync skipped")
             return {
                 "status": "pending",
                 "crm_record_id": None,
@@ -61,6 +62,8 @@ class OdooCRMClient:
             }
 
         try:
+            logger.info(f"🔄 Starting Odoo sync for call: {call_reference}")
+            
             # Search for existing lead/contact
             existing_record = await self._search_existing_record(
                 phone=customer_phone,
@@ -70,9 +73,10 @@ class OdooCRMClient:
 
             if existing_record:
                 record_id = existing_record["id"]
-                logger.info(f"Found existing Odoo record: {record_id}")
+                logger.info(f"✅ Found existing Odoo record: {record_id}")
             else:
                 # Create new lead
+                logger.info(f"📝 Creating new Odoo lead for: {call_reference}")
                 record_id = await self._create_crm_record(
                     call_reference=call_reference,
                     customer_phone=customer_phone,
@@ -82,6 +86,7 @@ class OdooCRMClient:
                     analysis=analysis,
                 )
                 if not record_id:
+                    logger.error("❌ Failed to create CRM record - record_id is None")
                     return {
                         "status": "failed",
                         "crm_record_id": None,
@@ -89,7 +94,7 @@ class OdooCRMClient:
                         "activity_id": None,
                         "message": "Could not create new lead in Odoo",
                     }
-                logger.info(f"Created new Odoo record: {record_id}")
+                logger.info(f"✅ Created new Odoo record: {record_id}")
 
             # Append analysis as note/activity
             activity_id = await self._create_activity(
@@ -98,6 +103,7 @@ class OdooCRMClient:
                 analysis=analysis,
                 agent_name=agent_name,
             )
+            logger.info(f"✅ Created activity: {activity_id}")
 
             # Create follow-up activity if escalation is medium or high
             followup_activity_id = None
@@ -107,7 +113,9 @@ class OdooCRMClient:
                     escalation_risk=analysis.escalation_risk,
                     recommended_action=analysis.recommended_action,
                 )
+                logger.info(f"✅ Created follow-up activity: {followup_activity_id}")
 
+            logger.info(f"✅ Odoo sync complete! Record ID: {record_id}")
             return {
                 "status": "synced",
                 "crm_record_id": record_id,
@@ -118,7 +126,7 @@ class OdooCRMClient:
             }
 
         except Exception as e:
-            logger.exception("Odoo CRM sync failed")
+            logger.exception(f"❌ Odoo CRM sync failed: {str(e)}")
             return {
                 "status": "failed",
                 "crm_record_id": None,
@@ -185,17 +193,19 @@ class OdooCRMClient:
                 "type": "lead",
             }
 
+            logger.info(f"   📋 Record data: name={record_data['name']}, phone={record_data['phone']}, email={record_data['email_from']}")
+            
             record_id = await self._odoo_rpc_call(
                 "crm.lead",
                 "create",
                 record_data,
             )
 
-            logger.info(f"Created Odoo lead: {record_id}")
+            logger.info(f"   ✅ Created Odoo lead with ID: {record_id}")
             return record_id
 
         except Exception as e:
-            logger.exception(f"Create CRM record failed: {e}")
+            logger.error(f"   ❌ Create CRM record failed: {str(e)}")
             return None
 
     async def _create_activity(
@@ -324,83 +334,42 @@ class OdooCRMClient:
         *args,
         **kwargs,
     ) -> Any:
-        """Make an XML-RPC call to Odoo via requests library (more reliable)."""
+        """Make an XML-RPC call to Odoo."""
         try:
-            # Use requests library for better control and error handling
+            import xmlrpc.client
+            
             common_url = f"{self.server_url}/xmlrpc/2/common"
             object_url = f"{self.server_url}/xmlrpc/2/object"
 
-            # Authenticate
-            auth_payload = {
-                "jsonrpc": "2.0",
-                "method": "call",
-                "params": {
-                    "service": "common",
-                    "method": "authenticate",
-                    "args": [self.db_name, self.username, self.password, {}]
-                },
-                "id": 1
-            }
+            logger.info(f"🔗 Odoo RPC Call: model={model}, method={method}")
+            logger.info(f"   Server: {self.server_url}")
+            logger.info(f"   DB: {self.db_name}, User: {self.username}")
 
-            # Try XML-RPC first
+            # Authenticate
             try:
-                import xmlrpc.client
                 common = xmlrpc.client.ServerProxy(common_url)
                 uid = common.authenticate(self.db_name, self.username, self.password, {})
-            except Exception as e:
-                logger.warning(f"XML-RPC auth failed, trying REST: {e}")
-                # Fallback to REST API
-                auth_response = requests.post(
-                    f"{self.server_url}/api/auth/login",
-                    json={"login": self.username, "password": self.password},
-                    timeout=self.timeout
-                )
-                if auth_response.status_code != 200:
-                    raise Exception(f"Odoo authentication failed: {auth_response.text}")
-                uid = auth_response.json().get("uid")
+                logger.info(f"✅ Odoo authentication successful: UID={uid}")
+            except Exception as auth_err:
+                logger.error(f"❌ Odoo authentication failed: {auth_err}")
+                raise Exception(f"Authentication failed: {str(auth_err)}")
 
             if not uid:
                 raise Exception("Odoo authentication failed - no UID returned")
 
-            # Execute RPC call via XML-RPC
+            # Execute RPC call
             try:
-                import xmlrpc.client
                 models = xmlrpc.client.ServerProxy(object_url)
+                logger.info(f"   Calling: {model}.{method}(*{len(args)} args)")
                 result = getattr(models, model).call(method, uid, self.password, *args, **kwargs)
+                logger.info(f"✅ Odoo RPC successful: result={result}")
                 return result
-            except Exception as e:
-                logger.warning(f"XML-RPC call failed: {e}, trying REST API")
-                
-                # Fallback to REST API
-                rest_payload = {
-                    "jsonrpc": "2.0",
-                    "method": "call",
-                    "params": {
-                        "service": "object",
-                        "method": method,
-                        "args": [model, uid, self.password] + list(args),
-                        "kwargs": kwargs
-                    },
-                    "id": 1
-                }
-                
-                rest_response = requests.post(
-                    f"{self.server_url}/api/object",
-                    json=rest_payload,
-                    timeout=self.timeout
-                )
-                
-                if rest_response.status_code != 200:
-                    raise Exception(f"REST API call failed: {rest_response.text}")
-                
-                response_data = rest_response.json()
-                if "error" in response_data:
-                    raise Exception(f"Odoo error: {response_data['error']}")
-                
-                return response_data.get("result")
+            except Exception as call_err:
+                logger.error(f"❌ Odoo RPC call failed: {call_err}")
+                raise Exception(f"RPC call failed: {str(call_err)}")
 
         except Exception as e:
-            logger.error(f"Odoo RPC call failed: {e}")
+            logger.error(f"❌ Odoo RPC failed: {str(e)}")
             raise
 
     def _build_record_description(
