@@ -27,7 +27,18 @@ class OdooCRMClient:
 
     def is_configured(self) -> bool:
         """Check if Odoo is properly configured."""
-        return self.enabled
+        # Check ODOO_ENABLED flag explicitly
+        settings = get_settings()
+        if not settings.odoo_enabled:
+            logger.info("⚠️  Odoo CRM disabled via ODOO_ENABLED=false")
+            return False
+        
+        # Check credentials
+        if not (self.server_url and self.username and self.password):
+            logger.warning("⚠️  Odoo CRM credentials missing")
+            return False
+            
+        return True
 
     async def sync_analysis(
         self,
