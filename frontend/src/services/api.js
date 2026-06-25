@@ -88,6 +88,13 @@ export async function downloadWordReport(jobId) {
   URL.revokeObjectURL(url);
 }
 
+export async function syncToOdooCRM(jobId) {
+  return request(`/results/${jobId}/sync-odoo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 /** @deprecated Use downloadWordReport */
 export async function downloadExport(jobId, format = 'docx') {
   if (format !== 'docx') {

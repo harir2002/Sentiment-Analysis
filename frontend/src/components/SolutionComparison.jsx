@@ -1,9 +1,33 @@
+import { useState } from 'react';
 import { Card, CardHeader, ResultField, SentimentBadge } from './ui';
 import { StatusBadge } from './SolutionTab';
+import { syncToOdooCRM } from '../services/api';
 
-export default function SolutionComparison({ result, callReference, audioFilename }) {
+export default function SolutionComparison({ result, callReference, audioFilename, jobId }) {
+  const [odooSyncing, setOdooSyncing] = useState(false);
+  const [odooMessage, setOdooMessage] = useState(null);
   const completed = result?.status === 'completed' || result?.sentiment;
   const confidencePct = completed ? Math.round((result?.confidence || 0) * 100) : null;
+
+  const handleSyncOdoo = async () => {
+    if (!jobId) return;
+    setOdooSyncing(true);
+    setOdooMessage(null);
+    try {
+      const response = await syncToOdooCRM(jobId);
+      setOdooMessage({
+        type: 'success',
+        text: `Synced to Odoo CRM${response.crm_record_id ? ` (ID: ${response.crm_record_id})` : ''}`
+      });
+    } catch (err) {
+      setOdooMessage({
+        type: 'error',
+        text: `Sync failed: ${err.message}`
+      });
+    } finally {
+      setOdooSyncing(false);
+    }
+  };
 
   return (
     <div className="analysis-layout">
@@ -72,6 +96,23 @@ export default function SolutionComparison({ result, callReference, audioFilenam
             <p className="analysis-transcript">{result.transcript}</p>
           </div>
         )}
+
+        {odooMessage && (
+          <div className={`odoo-message odoo-message-${odooMessage.type}`}>
+            {odooMessage.text}
+          </div>
+        )}
+
+        <div className="analysis-section-actions">
+          <button
+            onClick={handleSyncOdoo}
+            disabled={odooSyncing}
+            className="btn btn-odoo"
+            title="Push analysis results to Odoo CRM"
+          >
+            {odooSyncing ? '⏳ Syncing to Odoo CRM...' : '🔗 Push to Odoo CRM'}
+          </button>
+        </div>
       </Card>
     </div>
   );

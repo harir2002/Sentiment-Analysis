@@ -285,3 +285,36 @@ async def export_results_word(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="analysis-{job_id}.docx"'},
     )
+
+
+@router.post("/results/{job_id}/sync-odoo")
+async def sync_results_to_odoo(
+    job_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(verify_admin),
+):
+    from app.services.odoo_crm import sync_to_odoo
+    
+    job = await get_job(db, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if not job.result:
+        raise HTTPException(status_code=400, detail="No analysis results to sync")
+    
+    response = job_to_response(job)
+    if not response.result:
+        raise HTTPException(status_code=400, detail="No analysis data available")
+    
+    # Sync to Odoo
+    crm_sync = await sync_to_odoo(
+        call_reference=job.call_reference or job.id,
+        transcript=response.result.get('transcript') or '',
+        analysis=response.result,
+        customer_phone=None,
+        customer_email=None,
+        customer_name=None,
+        agent_name=None,
+    )
+    
+    return crm_sync

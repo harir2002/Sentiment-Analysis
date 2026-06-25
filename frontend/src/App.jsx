@@ -246,6 +246,7 @@ export default function App() {
                 result={result}
                 callReference={job?.call_reference || callReference}
                 audioFilename={job?.audio_filename || activeItem?.filename}
+                jobId={job?.job_id}
               />
               {canExport && <ExportSection jobId={job.job_id} />}
             </>
