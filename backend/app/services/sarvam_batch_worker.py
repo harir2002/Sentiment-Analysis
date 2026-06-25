@@ -247,13 +247,15 @@ async def _update_sarvam_providers(
                 else:
                     result.transcript = normalize_english_transcript(result.transcript)
                     logger.info("[████████████████████░] 80% - Running LLM analysis...")
+                    llm_start = time.perf_counter()
                     llm_result = await analyze_transcript(result.transcript, llm_name)
+                    llm_elapsed = time.perf_counter() - llm_start
                     _apply_llm_result(result, llm_result)
                     result.total_runtime_seconds = (
                         result.stt_runtime_seconds + result.llm_runtime_seconds
                     )
                     
-                    logger.info("[██████████████████████] 100% - Analysis Complete!")
+                    logger.info("[██████████████████████] 100% - Analysis Complete! (LLM took %.1fs)", llm_elapsed)
                     logger.info("✅ Results:")
                     logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
                     if result.analysis:
