@@ -1544,6 +1544,20 @@ input:focus-visible,
   border-color: #0052a3;
 }
 
+.btn-odoo-open {
+  background: #1a8917;
+  color: white;
+  border-color: #1a8917;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-odoo-open:hover:not(:disabled) {
+  background: #156812;
+  border-color: #156812;
+}
+
 .analysis-section-actions {
   display: flex;
   gap: 1rem;

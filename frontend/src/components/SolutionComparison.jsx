@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Card, CardHeader, ResultField, SentimentBadge } from './ui';
-import { StatusBadge } from './SolutionTab';
 import { syncToOdooCRM } from '../services/api';
 
 export default function SolutionComparison({ result, callReference, audioFilename, jobId }) {
   const [odooSyncing, setOdooSyncing] = useState(false);
   const [odooMessage, setOdooMessage] = useState(null);
+  const [odooRecordId, setOdooRecordId] = useState(null);
   const completed = result?.status === 'completed' || result?.sentiment;
   const confidencePct = completed ? Math.round((result?.confidence || 0) * 100) : null;
 
@@ -15,10 +15,18 @@ export default function SolutionComparison({ result, callReference, audioFilenam
     setOdooMessage(null);
     try {
       const response = await syncToOdooCRM(jobId);
-      setOdooMessage({
-        type: 'success',
-        text: `Synced to Odoo CRM${response.crm_record_id ? ` (ID: ${response.crm_record_id})` : ''}`
-      });
+      if (response.crm_record_id) {
+        setOdooRecordId(response.crm_record_id);
+        setOdooMessage({
+          type: 'success',
+          text: `Synced to Odoo CRM (ID: ${response.crm_record_id})`
+        });
+      } else {
+        setOdooMessage({
+          type: 'error',
+          text: 'Sync failed: No record ID returned'
+        });
+      }
     } catch (err) {
       setOdooMessage({
         type: 'error',
@@ -28,6 +36,16 @@ export default function SolutionComparison({ result, callReference, audioFilenam
       setOdooSyncing(false);
     }
   };
+
+  const handleOpenOdoo = () => {
+    if (!odooRecordId) return;
+    // Extract Odoo server URL from environment or use default
+    const odooUrl = import.meta.env.VITE_ODOO_URL || 'https://sba-info-solutions-pvt-ltd.odoo.com';
+    const recordUrl = `${odooUrl}/web#id=${odooRecordId}&model=crm.lead&view_type=form`;
+    window.open(recordUrl, '_blank');
+  };
+
+  if (!result) return null;
 
   return (
     <div className="analysis-layout">
@@ -42,78 +60,121 @@ export default function SolutionComparison({ result, callReference, audioFilenam
         </div>
       </div>
 
+      {/* Core Metrics Section */}
       <Card className="analysis-result-card">
         <CardHeader
           title="Analysis Result"
-          subtitle="Sentiment, transcript, and recommended actions"
+          subtitle="Call sentiment, intent, and escalation assessment"
         />
         <div className="analysis-fields">
-          <ResultField label="Sentiment" value={completed ? (<SentimentBadge sentiment={result?.sentiment} />) : ('—')} />
-          <ResultField label="Confidence" value={confidencePct != null ? `${confidencePct}%` : '—'} />
-          <ResultField label="Intent" value={result?.issue_type || '—'} />
-          <ResultField label="Escalation Risk" value={result?.escalation_risk || '—'} />
+          <ResultField 
+            label="Sentiment" 
+            value={completed ? (<SentimentBadge sentiment={result?.sentiment} />) : ('—')} 
+          />
+          <ResultField 
+            label="Confidence" 
+            value={confidencePct != null ? `${confidencePct}%` : '—'} 
+          />
+          <ResultField 
+            label="Intent" 
+            value={result?.issue_type || 'General Inquiry'} 
+          />
+          <ResultField 
+            label="Escalation Risk" 
+            value={result?.escalation_risk || 'Low'} 
+          />
         </div>
+      </Card>
 
-        {result?.summary && (
+      {/* Summary Section */}
+      {result?.summary && (
+        <Card>
+          <CardHeader title="Summary" subtitle="Call overview" />
           <div className="analysis-section">
-            <h4 className="analysis-label">Summary</h4>
             <p className="analysis-text">{result.summary}</p>
           </div>
-        )}
+        </Card>
+      )}
 
-        {result?.key_issues?.length > 0 && (
-          <div className="analysis-section">
-            <h4 className="analysis-label">Key Issues</h4>
+      {/* Key Issues Section */}
+      <Card>
+        <CardHeader title="Key Issues" subtitle="Topics and concerns identified" />
+        <div className="analysis-section">
+          {result?.key_issues?.length > 0 ? (
             <ul className="analysis-list">
               {result.key_issues.map((issue, i) => (
                 <li key={i}>{issue}</li>
               ))}
             </ul>
-          </div>
-        )}
+          ) : (
+            <p className="analysis-muted">No significant issues identified.</p>
+          )}
+        </div>
+      </Card>
 
-        {result?.action_items?.length > 0 && (
-          <div className="analysis-section">
-            <h4 className="analysis-label">Action Items</h4>
+      {/* Action Items Section */}
+      <Card>
+        <CardHeader title="Action Items" subtitle="Recommended follow-up actions" />
+        <div className="analysis-section">
+          {result?.action_items?.length > 0 ? (
             <ul className="analysis-list">
               {result.action_items.map((action, i) => (
                 <li key={i}>{action}</li>
               ))}
             </ul>
-          </div>
-        )}
-
-        {result?.recommended_action && (
-          <div className="analysis-section">
-            <h4 className="analysis-label">Recommended Action</h4>
-            <p className="analysis-text highlight">{result.recommended_action}</p>
-          </div>
-        )}
-
-        {result?.transcript && (
-          <div className="analysis-section">
-            <h4 className="analysis-label">Transcript</h4>
-            <p className="analysis-transcript">{result.transcript}</p>
-          </div>
-        )}
-
-        {odooMessage && (
-          <div className={`odoo-message odoo-message-${odooMessage.type}`}>
-            {odooMessage.text}
-          </div>
-        )}
-
-        <div className="analysis-section-actions">
-          <button
-            onClick={handleSyncOdoo}
-            disabled={odooSyncing}
-            className="btn btn-odoo"
-            title="Push analysis results to Odoo CRM"
-          >
-            {odooSyncing ? '⏳ Syncing to Odoo CRM...' : '🔗 Push to Odoo CRM'}
-          </button>
+          ) : (
+            <p className="analysis-muted">No specific action items identified.</p>
+          )}
         </div>
       </Card>
+
+      {/* Recommended Action Section */}
+      {result?.recommended_action && (
+        <Card>
+          <CardHeader title="Recommended Action" subtitle="Primary follow-up suggestion" />
+          <div className="analysis-section">
+            <p className="analysis-text highlight">{result.recommended_action}</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Transcript Section */}
+      {result?.transcript && (
+        <Card>
+          <CardHeader title="Transcript" subtitle="Full call recording transcript" />
+          <div className="analysis-section">
+            <p className="analysis-transcript">{result.transcript}</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Odoo CRM Sync Message */}
+      {odooMessage && (
+        <div className={`odoo-message odoo-message-${odooMessage.type}`}>
+          {odooMessage.text}
+        </div>
+      )}
+
+      {/* Odoo CRM Sync & Open Buttons */}
+      <div className="analysis-section-actions">
+        <button
+          onClick={handleSyncOdoo}
+          disabled={odooSyncing}
+          className="btn btn-odoo"
+          title="Push analysis results to Odoo CRM"
+        >
+          {odooSyncing ? '⏳ Syncing to Odoo CRM...' : '🔗 Push to Odoo CRM'}
+        </button>
+        {odooRecordId && (
+          <button
+            onClick={handleOpenOdoo}
+            className="btn btn-odoo-open"
+            title="Open record in Odoo CRM"
+          >
+            📂 Open in Odoo
+          </button>
+        )}
+      </div>
     </div>
   );
 }
