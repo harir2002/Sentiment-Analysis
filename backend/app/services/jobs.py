@@ -308,6 +308,38 @@ def job_to_response(job: ComparisonJob) -> JobResponse:
 
     ready = result is not None
 
+    # Calculate status message with percentage
+    status_message = ""
+    if ready:
+        status_message = "✅ 100% - Analysis Complete!"
+    elif job.status == "running":
+        # Estimate progress based on elapsed time
+        if job.created_at:
+            elapsed = (datetime.utcnow() - job.created_at).total_seconds()
+            if elapsed < 5:
+                percent = 10
+                status_message = f"🎙️ 10% - Uploading audio..."
+            elif elapsed < 30:
+                percent = 25
+                status_message = f"🎤 25% - Transcribing audio..."
+            elif elapsed < 60:
+                percent = 50
+                status_message = f"🤖 50% - Analyzing with AI..."
+            elif elapsed < 90:
+                percent = 75
+                status_message = f"⚙️ 75% - Processing results..."
+            else:
+                percent = 90
+                status_message = f"⏳ 90% - Finalizing..."
+        else:
+            status_message = "⏳ 20% - Starting..."
+    elif job.status == "pending":
+        status_message = "⏳ 5% - Queued for processing..."
+    elif job.status == "failed":
+        status_message = f"❌ Error: {job.error or 'Unknown error'}"
+    else:
+        status_message = f"📊 Status: {job.status}"
+
     return JobResponse(
         job_id=job.id,
         status=JobStatus(job.status),
@@ -322,4 +354,5 @@ def job_to_response(job: ComparisonJob) -> JobResponse:
         pending_providers=0,
         results_ready=ready,
         aggregate_status=job.status,
+        status_message=status_message,
     )

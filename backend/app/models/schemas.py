@@ -173,6 +173,7 @@ class JobResponse(BaseModel):
     pending_providers: int = 0
     results_ready: bool = False
     aggregate_status: str = "running"
+    status_message: str = ""  # Human-readable status like "25% - Transcribing..."
 
 
 class CallListItem(BaseModel):

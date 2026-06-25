@@ -35,6 +35,15 @@ function renderProgressBar(percentage) {
   return `[${'█'.repeat(filled)}${'░'.repeat(empty)}] ${percentage}%`;
 }
 
+function getStatusDisplay(job, uploadStatus) {
+  // Use status_message from job if available (shows percentage + status)
+  if (job?.status_message) {
+    return job.status_message;
+  }
+  // Fallback to uploadStatus
+  return uploadStatus || 'Processing...';
+}
+
 export default function ProcessingState({
   uploadStatus,
   job,
@@ -64,16 +73,13 @@ export default function ProcessingState({
 
   const stepIndex = getProcessingStepIndex({ uploadStatus, job, running });
   const progressBar = renderProgressBar(progress);
-  const progressMessage = uploadStatus ||
-    (multiFile
-      ? `Processing ${batchTotal} call recordings…`
-      : 'Processing your call recording…');
+  const statusDisplay = getStatusDisplay(job, uploadStatus);
 
   return (
     <div className="processing-state">
       <ProgressSteps steps={STEPS} currentIndex={stepIndex} />
       <div className="processing-body">
-        <p className="processing-message">{progressMessage}</p>
+        <p className="processing-message">{statusDisplay}</p>
         <p className="processing-progress">{progressBar}</p>
         {multiFile && (
           <p className="processing-hint">
