@@ -7,7 +7,7 @@ Usage:
 
 This script validates your Odoo credentials before running the full application.
 """
-import xmlrpc.client as xmlrpc
+import xmlrpc.client
 from app.core.config import get_settings
 
 def test_odoo_connection():
@@ -29,9 +29,9 @@ def test_odoo_connection():
     print()
     
     try:
-        # Test common endpoint
+        # Test common endpoint (no timeout parameter in ServerProxy)
         common_url = f"{settings.odoo_server_url}/xmlrpc/2/common"
-        common = xmlrpc.ServerProxy(common_url, timeout=15)
+        common = xmlrpc.client.ServerProxy(common_url)
         
         print("Authenticating...")
         uid = common.authenticate(
@@ -50,36 +50,51 @@ def test_odoo_connection():
         
         # Test RPC endpoint
         object_url = f"{settings.odoo_server_url}/xmlrpc/2/object"
-        models = xmlrpc.ServerProxy(object_url, timeout=15)
+        models = xmlrpc.client.ServerProxy(object_url)
         
         print("Testing CRM models...")
         
         # Test search on crm.lead
         try:
-            leads = models.call(
-                "crm.lead",
-                "search",
+            leads = models.execute_kw(
+                settings.odoo_db_name,
                 uid,
                 settings.odoo_password,
-                [("name", "=", "TEST_CONNECTION_VERIFY")],
-                {"limit": 1}
+                "crm.lead",
+                "search",
+                [[]]  # Empty domain
             )
-            print(f"✓ crm.lead model accessible (found {len(leads)} test leads)")
+            print(f"✓ crm.lead model accessible (found {len(leads)} leads)")
         except Exception as e:
             print(f"❌ crm.lead model error: {e}")
             return False
         
-        # Test mail.activity
+        # Test create a test lead
         try:
-            activities = models.call(
-                "mail.activity",
-                "search",
+            test_lead_id = models.execute_kw(
+                settings.odoo_db_name,
                 uid,
                 settings.odoo_password,
-                [],
-                {"limit": 1}
+                "crm.lead",
+                "create",
+                [{"name": "Test Connection", "email_from": "test@test.com"}]
             )
-            print(f"✓ mail.activity model accessible (total activities: {len(activities)})")
+            print(f"✓ crm.lead create works (created lead ID: {test_lead_id})")
+        except Exception as e:
+            print(f"❌ crm.lead create error: {e}")
+            return False
+        
+        # Test mail.activity
+        try:
+            activities = models.execute_kw(
+                settings.odoo_db_name,
+                uid,
+                settings.odoo_password,
+                "mail.activity",
+                "search",
+                [[]]
+            )
+            print(f"✓ mail.activity model accessible")
         except Exception as e:
             print(f"⚠️  mail.activity warning: {e}")
             # Not critical, might be missing in lite instances
@@ -99,6 +114,7 @@ def test_odoo_connection():
         print("  3. Confirm username and password are correct")
         print("  4. Verify database name matches your Odoo instance")
         print("  5. Check firewall allows outbound HTTPS to Odoo")
+        print("  6. Try accessing the Odoo server in a web browser to verify it's running")
         return False
 
 

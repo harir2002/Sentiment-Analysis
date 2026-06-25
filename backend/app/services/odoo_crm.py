@@ -345,7 +345,7 @@ class OdooCRMClient:
         *args,
         **kwargs,
     ) -> Any:
-        """Make an XML-RPC call to Odoo."""
+        """Make an XML-RPC call to Odoo using execute_kw method."""
         try:
             import xmlrpc.client
             
@@ -368,12 +368,22 @@ class OdooCRMClient:
             if not uid:
                 raise Exception("Odoo authentication failed - no UID returned")
 
-            # Execute RPC call
+            # Execute RPC call using execute_kw (correct Odoo format)
             try:
                 models = xmlrpc.client.ServerProxy(object_url)
-                logger.info(f"   Calling: {model}.{method}(*{len(args)} args)")
-                result = getattr(models, model).call(method, uid, self.password, *args, **kwargs)
-                logger.info(f"✅ Odoo RPC successful: result={result}")
+                logger.info(f"   Calling: {model}.{method}(db={self.db_name}, uid={uid}, ...)")
+                
+                # For Odoo XML-RPC: execute_kw(db, uid, password, model, method, args, kwargs)
+                result = models.execute_kw(
+                    self.db_name,
+                    uid,
+                    self.password,
+                    model,
+                    method,
+                    list(args),
+                    kwargs or {}
+                )
+                logger.info(f"✅ Odoo RPC successful: result type={type(result).__name__}, result={result if not isinstance(result, list) else f'list[{len(result)}]'}")
                 return result
             except Exception as call_err:
                 logger.error(f"❌ Odoo RPC call failed: {call_err}")
