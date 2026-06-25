@@ -193,23 +193,34 @@ class OdooCRMClient:
     ) -> Optional[int]:
         """Create a new CRM lead record in Odoo."""
         try:
+            # Get source ID - may be None, handle gracefully
+            source_id = await self._get_or_create_source("AI Call Analysis")
+            
+            # Build record data, filtering out None values
             record_data = {
                 "name": customer_name or call_reference or "Call Analysis Lead",
-                "phone": customer_phone or "",
-                "email_from": customer_email or "",
-                "description": self._build_record_description(
-                    call_reference, transcript, analysis
-                ),
-                "source_id": await self._get_or_create_source("AI Call Analysis"),
                 "type": "lead",
             }
+            
+            # Only add optional fields if they have values
+            if customer_phone:
+                record_data["phone"] = customer_phone
+            if customer_email:
+                record_data["email_from"] = customer_email
+            if source_id:
+                record_data["source_id"] = source_id
+                
+            # Add description
+            record_data["description"] = self._build_record_description(
+                call_reference, transcript, analysis
+            )
 
-            logger.info(f"   📋 Record data: name={record_data['name']}, phone={record_data['phone']}, email={record_data['email_from']}")
+            logger.info(f"   📋 Record data: name={record_data['name']}, type={record_data['type']}")
             
             record_id = await self._odoo_rpc_call(
                 "crm.lead",
                 "create",
-                record_data,
+                [record_data],  # create() expects a list with dict
             )
 
             logger.info(f"   ✅ Created Odoo lead with ID: {record_id}")
@@ -233,23 +244,30 @@ class OdooCRMClient:
                 transcript, analysis, agent_name
             )
 
+            activity_type_id = await self._get_or_create_activity_type("note")
+            
+            # Build activity data, filtering None values
             activity_data = {
                 "res_model": "crm.lead",
                 "res_id": record_id,
-                "activity_type_id": await self._get_or_create_activity_type("note"),
                 "summary": activity_summary,
                 "note": activity_description,
                 "user_id": 2,  # Admin user
-                "date_deadline": datetime.utcnow().date(),
             }
+            
+            if activity_type_id:
+                activity_data["activity_type_id"] = activity_type_id
+            
+            # date_deadline must be serializable - convert to string
+            activity_data["date_deadline"] = datetime.utcnow().strftime("%Y-%m-%d")
 
             activity_id = await self._odoo_rpc_call(
                 "mail.activity",
                 "create",
-                activity_data,
+                [activity_data],  # create() expects a list
             )
 
-            logger.info(f"Created Odoo activity: {activity_id}")
+            logger.info(f"✅ Created Odoo activity: {activity_id}")
             return activity_id
 
         except Exception as e:
@@ -264,25 +282,28 @@ class OdooCRMClient:
     ) -> Optional[int]:
         """Create follow-up activity for escalated cases."""
         try:
+            activity_type_id = await self._get_or_create_activity_type("todo")
             due_date = datetime.utcnow() + timedelta(days=1 if escalation_risk == "medium" else 0)
 
             activity_data = {
                 "res_model": "crm.lead",
                 "res_id": record_id,
-                "activity_type_id": await self._get_or_create_activity_type("todo"),
                 "summary": f"Follow-up: {escalation_risk.upper()} Priority",
                 "note": f"Escalation: {escalation_risk}\n\nRecommended Action:\n{recommended_action}",
                 "user_id": 2,
-                "date_deadline": due_date.date(),
+                "date_deadline": due_date.strftime("%Y-%m-%d"),
             }
+            
+            if activity_type_id:
+                activity_data["activity_type_id"] = activity_type_id
 
             activity_id = await self._odoo_rpc_call(
                 "mail.activity",
                 "create",
-                activity_data,
+                [activity_data],  # create() expects a list
             )
 
-            logger.info(f"Created follow-up activity: {activity_id}")
+            logger.info(f"✅ Created follow-up activity: {activity_id}")
             return activity_id
 
         except Exception as e:
@@ -295,18 +316,20 @@ class OdooCRMClient:
             result = await self._odoo_rpc_call(
                 "crm.lead.source",
                 "search",
-                [("name", "=", source_name)],
+                [[("name", "=", source_name)]],  # search expects [domain]
             )
 
-            if result:
+            if result and isinstance(result, list) and len(result) > 0:
                 return result[0]
 
+            # Create new source
             source_id = await self._odoo_rpc_call(
                 "crm.lead.source",
                 "create",
-                {"name": source_name},
+                [{"name": source_name}],  # create expects [dict]
             )
 
+            logger.info(f"✅ Created CRM source: {source_id}")
             return source_id
 
         except Exception as e:
@@ -319,20 +342,24 @@ class OdooCRMClient:
             result = await self._odoo_rpc_call(
                 "mail.activity.type",
                 "search",
-                [("name", "=", activity_type)],
+                [[("name", "=", activity_type)]],  # search expects [domain]
             )
 
-            if result:
+            if result and isinstance(result, list) and len(result) > 0:
                 return result[0]
 
-            # Use default activity type if not found
+            # Try to find default "To Do" type
             result = await self._odoo_rpc_call(
                 "mail.activity.type",
                 "search",
-                [("name", "=", "To Do")],
+                [[("name", "=", "To Do")]],
             )
 
-            return result[0] if result else 4  # Default activity type ID
+            if result and isinstance(result, list) and len(result) > 0:
+                return result[0]
+            
+            # Return default activity type ID if search fails
+            return 4
 
         except Exception as e:
             logger.warning(f"Get or create activity type failed: {e}")
@@ -358,7 +385,8 @@ class OdooCRMClient:
 
             # Authenticate
             try:
-                common = xmlrpc.client.ServerProxy(common_url)
+                # Enable allow_none to handle None values in responses
+                common = xmlrpc.client.ServerProxy(common_url, allow_none=True)
                 uid = common.authenticate(self.db_name, self.username, self.password, {})
                 logger.info(f"✅ Odoo authentication successful: UID={uid}")
             except Exception as auth_err:
@@ -370,18 +398,31 @@ class OdooCRMClient:
 
             # Execute RPC call using execute_kw (correct Odoo format)
             try:
-                models = xmlrpc.client.ServerProxy(object_url)
+                # Enable allow_none for responses
+                models = xmlrpc.client.ServerProxy(object_url, allow_none=True)
                 logger.info(f"   Calling: {model}.{method}(db={self.db_name}, uid={uid}, ...)")
                 
                 # For Odoo XML-RPC: execute_kw(db, uid, password, model, method, args, kwargs)
+                # Filter out None values from kwargs to prevent marshaling errors
+                clean_kwargs = {k: v for k, v in (kwargs or {}).items() if v is not None}
+                
+                # Clean args too - remove None values from lists
+                clean_args = []
+                for arg in args:
+                    if isinstance(arg, dict):
+                        # Remove None values from dict arguments
+                        clean_args.append({k: v for k, v in arg.items() if v is not None})
+                    else:
+                        clean_args.append(arg)
+                
                 result = models.execute_kw(
                     self.db_name,
                     uid,
                     self.password,
                     model,
                     method,
-                    list(args),
-                    kwargs or {}
+                    clean_args,
+                    clean_kwargs
                 )
                 logger.info(f"✅ Odoo RPC successful: result type={type(result).__name__}, result={result if not isinstance(result, list) else f'list[{len(result)}]'}")
                 return result
