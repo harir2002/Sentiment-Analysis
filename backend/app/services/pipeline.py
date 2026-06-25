@@ -208,6 +208,8 @@ async def run_full_pipeline(
     *,
     language_code: str | None = None,
 ) -> ProviderResult:
+    import asyncio
+    
     stt_name, llm_name = SOLUTION_CONFIG[solution]
     stt_model, llm_model = get_model_names(stt_name, llm_name)
     label = SOLUTION_LABELS[solution]
@@ -224,22 +226,24 @@ async def run_full_pipeline(
 
     pipeline_start = time.perf_counter()
     logger.info("📍 Pipeline starting: solution=%s, stt=%s, llm=%s", solution.value, stt_name, llm_name)
+    logger.info("[████░░░░░░░░░░░░░░] 20% - Initializing...")
 
     try:
         validate_audio_file(audio_path)
         logger.info("   ✓ Audio file validated")
+        logger.info("[██████░░░░░░░░░░░░] 30% - Starting STT & Language detection...")
 
         logger.info("🔄 Starting STT (Speech-to-Text)...")
         stt_result = await transcribe(audio_path, stt_name, language_code=language_code)
         result = _apply_stt_pending(result, stt_result)
-        logger.info("   ✓ STT completed: status=%s, runtime=%.2fs", stt_result.status, stt_result.runtime_seconds or 0)
+        logger.info("   ✓ STT completed: status=%s", stt_result.status)
 
         if stt_result.status in {"queued", "running", "timed_out"} and (
             stt_result.pending_background or not stt_result.transcript.strip()
         ):
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.info("   ⏳ STT still processing in background (batch mode), returning pending result")
-            logger.info("   ℹ️  Background worker will complete STT and run LLM analysis")
+            logger.info("[████████░░░░░░░░░░] 40% - STT processing in background (batch mode)")
+            logger.info("   ℹ️  Background worker will complete STT and LLM analysis simultaneously")
             return result
 
         if stt_result.error and stt_result.status not in {"timed_out", "rate_limited"}:
@@ -249,14 +253,14 @@ async def run_full_pipeline(
                 else stt_result.error
             )
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.warning("   ❌ STT failed: %s", result.error)
+            logger.error("❌ STT failed: %s", result.error)
             return result
 
         if not result.transcript.strip():
             result.status = "failed"
             result.error = ENGLISH_TRANSLATION_FAILED
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.warning("   ❌ Empty transcript received")
+            logger.warning("❌ Empty transcript received")
             return result
 
         english_error = validate_english_transcript(result.transcript)
@@ -265,11 +269,12 @@ async def run_full_pipeline(
             result.error = english_error
             result.transcript = ""
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.warning("   ❌ English validation failed: %s", english_error)
+            logger.warning("❌ English validation failed: %s", english_error)
             return result
 
         result.transcript = normalize_english_transcript(result.transcript)
         logger.info("   ✓ Transcript normalized, length=%d chars", len(result.transcript))
+        logger.info("[██████████░░░░░░░░] 50% - Transcript ready, starting LLM analysis...")
 
         guardrail_error = validate_transcript_for_analysis(
             result.transcript,
@@ -279,32 +284,34 @@ async def run_full_pipeline(
             result.status = "failed"
             result.error = guardrail_error
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.warning("   ❌ Guardrail check failed: %s", guardrail_error)
+            logger.warning("❌ Guardrail check failed: %s", guardrail_error)
             return result
 
         logger.info("🤖 Starting LLM Analysis (sentiment, issues, actions)...")
+        logger.info("[██████████████░░░░░░] 70% - Running LLM analysis...")
         llm_result = await analyze_transcript(result.transcript, llm_name)
         result = _apply_llm_result(result, llm_result)
-        logger.info("   ✓ LLM analysis completed: status=%s, runtime=%.2fs", result.status, result.llm_runtime_seconds or 0)
+        logger.info("   ✓ LLM analysis completed")
         
         if result.analysis:
-            logger.info("   📈 Analysis Results:")
+            logger.info("[██████████████████░░] 90% - Processing results...")
+            logger.info("   📈 Results:")
             logger.info("      Sentiment: %s", result.analysis.sentiment)
             logger.info("      Confidence: %.0f%%", result.analysis.confidence * 100)
             logger.info("      Key Issues: %s", ", ".join(result.analysis.key_issues or ["None"]))
 
         result.total_runtime_seconds = time.perf_counter() - pipeline_start
-        logger.info("✅ Pipeline completed in %.2fs (STT: %.2fs, LLM: %.2fs)", 
-                   result.total_runtime_seconds,
-                   result.stt_runtime_seconds or 0,
-                   result.llm_runtime_seconds or 0)
+        logger.info("[██████████████████████] 100% - Pipeline completed!")
+        logger.info("✅ Analysis: %s | Confidence: %.0f%%", 
+                   result.analysis.sentiment if result.analysis else "N/A",
+                   (result.analysis.confidence * 100) if result.analysis else 0)
         return result
 
     except AudioValidationError as e:
         result.status = "failed"
         result.error = str(e)
         result.total_runtime_seconds = time.perf_counter() - pipeline_start
-        logger.warning("❌ Pipeline audio validation failed: %s", e)
+        logger.warning("❌ Audio validation failed: %s", e)
         return result
     except Exception as e:
         result.status = "failed"

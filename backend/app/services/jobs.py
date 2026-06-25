@@ -173,6 +173,7 @@ async def run_job_background(job_id: str):
             logger.info("   Path: %s", audio_path)
             validate_audio_file(audio_path)
             logger.info("   ✓ Audio file valid")
+            logger.info("[██░░░░░░░░░░░░░░░░░░] 10% - File validated")
 
             logger.info("🎙️  STEP 2: STARTING TRANSCRIPTION & ANALYSIS (Sarvam STT + LLM)")
             logger.info("   Processing audio file...")
@@ -183,11 +184,11 @@ async def run_job_background(job_id: str):
 
             logger.info("📊 STEP 3: PROCESSING COMPLETE")
             logger.info("   Status: %s", result.status)
-            logger.info("   STT Runtime: %.2fs", result.stt_runtime_seconds or 0)
-            logger.info("   LLM Runtime: %.2fs", result.llm_runtime_seconds or 0)
-            logger.info("   Total Pipeline: %.2fs", pipeline_elapsed)
+            if result.status != "running":
+                logger.info("   ✓ Analysis completed")
 
             if result.status == "completed":
+                logger.info("[████████████████████] 100% - Analysis complete")
                 logger.info("✅ STEP 4: SAVING RESULTS")
                 logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
                 if result.analysis:
@@ -200,15 +201,12 @@ async def run_job_background(job_id: str):
 
                 if result.analysis and get_settings().odoo_enabled:
                     logger.info("🔄 STEP 5: SYNCING TO ODOO CRM")
-                    logger.info("   Syncing analysis to Odoo...")
-                    # Sync happens in _save_job_results already
                     logger.info("   ✓ Odoo sync scheduled")
                 else:
                     logger.info("⏭️  STEP 5: ODOO CRM SYNC (disabled or no analysis)")
 
                 logger.info("=" * 80)
-                total_elapsed = time.perf_counter() - job_start_time
-                logger.info("🏁 JOB COMPLETED SUCCESSFULLY in %.2fs", total_elapsed)
+                logger.info("🏁 JOB COMPLETED SUCCESSFULLY")
                 logger.info("   Job ID: %s", job_id)
                 logger.info("   Filename: %s", job.audio_filename)
                 logger.info("=" * 80)

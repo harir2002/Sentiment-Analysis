@@ -98,15 +98,14 @@ async def _background_batch_worker(
             status = await job.get_status()
             job_state = (status.job_state or "unknown").lower()
             elapsed = time.perf_counter() - worker_start
-            logger.info(
-                "⏳ Sarvam Batch Status: job=%s, state=%s, elapsed=%.0fs",
-                batch_job_id,
-                job_state,
-                elapsed,
-            )
+            
+            # Calculate progress percentage (0-60% for STT, 60-90% for LLM prep)
+            progress_percent = min(20 + int((elapsed / settings.sarvam_batch_max_wait_seconds) * 60), 60)
+            progress_bar = "█" * (progress_percent // 5) + "░" * (20 - progress_percent // 5)
+            logger.info(f"[{progress_bar}] {progress_percent}% - Transcribing audio ({int(elapsed)}s)...")
 
             if job_state == "completed":
-                logger.info("✅ BATCH JOB COMPLETED: Fetching transcript...")
+                logger.info("[████████████████████] 60% - Batch completed, fetching transcript...")
                 transcript, err = await fetch_batch_transcript(job)
                 stt_runtime = time.perf_counter() - worker_start
                 if err:
@@ -115,7 +114,7 @@ async def _background_batch_worker(
                         comparison_job_id, audio_path, None, err, "failed"
                     )
                     return
-                logger.info("📝 Transcript fetched: length=%d chars", len(transcript or ""))
+                logger.info("[████████████████████] 70% - Transcript fetched, starting LLM analysis...")
                 state.transcript = transcript
                 state.language_code = AUTO_DETECT_CODE
                 state.status = "completed"
@@ -124,7 +123,7 @@ async def _background_batch_worker(
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, transcript, None, "completed", stt_runtime
                 )
-                logger.info("✅ Batch worker completed STT and LLM in %.2fs", stt_runtime)
+                logger.info("[██████████████████████] 100% - Analysis complete!")
                 return
 
             if job_state == "failed":
@@ -139,7 +138,7 @@ async def _background_batch_worker(
                 not timed_out_marked
                 and elapsed >= settings.sarvam_batch_max_wait_seconds
             ):
-                logger.warning("⚠️  BATCH JOB TIMEOUT: Marked as timed_out after %.0fs", elapsed)
+                logger.warning("[████████████████████] 100% - Batch timeout, marking as completed")
                 timed_out_marked = True
                 state.status = "timed_out"
                 state.pending_background = True
@@ -153,7 +152,7 @@ async def _background_batch_worker(
                 )
 
             if elapsed >= settings.sarvam_batch_absolute_max_seconds:
-                logger.error("❌ BATCH JOB EXCEEDED ABSOLUTE MAX WAIT: %.0fs", elapsed)
+                logger.error("❌ BATCH JOB EXCEEDED ABSOLUTE MAX WAIT")
                 err = "Sarvam batch STT exceeded maximum wait time"
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, None, err, "failed"
@@ -278,20 +277,20 @@ async def _update_sarvam_providers(
 
             result.transcript = normalize_english_transcript(result.transcript)
 
+            logger.info("[████████████████████░] 80% - Running LLM analysis...")
             llm_result = await analyze_transcript(result.transcript, llm_name)
             _apply_llm_result(result, llm_result)
             result.total_runtime_seconds = (
                 result.stt_runtime_seconds + result.llm_runtime_seconds
             )
             
-            logger.info("✅ LLM ANALYSIS COMPLETED (background worker)")
+            logger.info("[██████████████████████] 100% - Analysis Complete!")
+            logger.info("✅ Results:")
             logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
             if result.analysis:
                 logger.info("   Confidence: %.0f%%", result.analysis.confidence * 100)
                 logger.info("   Key Issues: %s", ", ".join(result.analysis.key_issues or []))
                 logger.info("   Recommended Action: %s", result.analysis.recommended_action or "N/A")
-            logger.info("   LLM Runtime: %.2fs", result.llm_runtime_seconds or 0)
-            logger.info("   Total (STT+LLM): %.2fs", result.total_runtime_seconds)
 
         # Single-solution mode: store first (primary) result only
         if results:
