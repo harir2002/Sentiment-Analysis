@@ -50,7 +50,7 @@ export default function SolutionComparison({ result, callReference, audioFilenam
         <div className="analysis-fields">
           <ResultField label="Sentiment" value={completed ? (<SentimentBadge sentiment={result?.sentiment} />) : ('—')} />
           <ResultField label="Confidence" value={confidencePct != null ? `${confidencePct}%` : '—'} />
-          <ResultField label="Issue Type" value={result?.issue_type || '—'} />
+          <ResultField label="Intent" value={result?.issue_type || '—'} />
           <ResultField label="Escalation Risk" value={result?.escalation_risk || '—'} />
         </div>
 
