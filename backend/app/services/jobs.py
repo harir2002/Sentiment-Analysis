@@ -1,4 +1,6 @@
 import uuid
+import logging
+import time
 from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +17,8 @@ from app.services.sarvam_batch_worker import schedule_sarvam_batch_followups
 from app.providers.sarvam_stt_coordinator import clear_shared_state
 from app.services.stt_english import sanitize_provider_result_for_client
 from app.services.odoo_crm import sync_to_odoo
+
+logger = logging.getLogger(__name__)
 
 
 async def create_job(
@@ -133,11 +137,17 @@ async def run_job_background(job_id: str):
     from app.core.database import AsyncSessionLocal
 
     audio_path = None
+    job_start_time = time.perf_counter()
 
     async with AsyncSessionLocal() as db:
         job = await get_job(db, job_id)
         if not job:
+            logger.error("❌ JOB NOT FOUND: job_id=%s", job_id)
             return
+
+        logger.info("=" * 80)
+        logger.info("🎬 JOB STARTED: job_id=%s, filename=%s", job_id, job.audio_filename)
+        logger.info("=" * 80)
 
         job.status = JobStatus.RUNNING.value
         await db.commit()
@@ -153,11 +163,64 @@ async def run_job_background(job_id: str):
             if not audio_path:
                 raise ValueError("No audio file associated with this job")
 
+            logger.info("📁 STEP 1: VALIDATING AUDIO FILE")
+            logger.info("   Path: %s", audio_path)
             validate_audio_file(audio_path)
+            logger.info("   ✓ Audio file valid")
+
+            logger.info("🎙️  STEP 2: STARTING TRANSCRIPTION & ANALYSIS (Sarvam STT + LLM)")
+            logger.info("   Processing audio file...")
+            
+            pipeline_start = time.perf_counter()
             result = await run_single_solution(audio_path)
-            await _save_job_results(db, job, result, audio_path)
+            pipeline_elapsed = time.perf_counter() - pipeline_start
+
+            logger.info("📊 STEP 3: PROCESSING COMPLETE")
+            logger.info("   Status: %s", result.status)
+            logger.info("   STT Runtime: %.2fs", result.stt_runtime_seconds or 0)
+            logger.info("   LLM Runtime: %.2fs", result.llm_runtime_seconds or 0)
+            logger.info("   Total Pipeline: %.2fs", pipeline_elapsed)
+
+            if result.status == "completed":
+                logger.info("✅ STEP 4: SAVING RESULTS")
+                logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
+                if result.analysis:
+                    logger.info("   Confidence: %.0f%%", result.analysis.confidence * 100)
+                    logger.info("   Key Issues: %s", ", ".join(result.analysis.key_issues or []))
+                    logger.info("   Recommended Action: %s", result.analysis.recommended_action or "N/A")
+                
+                await _save_job_results(db, job, result, audio_path)
+                logger.info("   ✓ Results saved to database")
+
+                if result.analysis and get_settings().odoo_enabled:
+                    logger.info("🔄 STEP 5: SYNCING TO ODOO CRM")
+                    logger.info("   Syncing analysis to Odoo...")
+                    # Sync happens in _save_job_results already
+                    logger.info("   ✓ Odoo sync scheduled")
+                else:
+                    logger.info("⏭️  STEP 5: ODOO CRM SYNC (disabled or no analysis)")
+
+                logger.info("=" * 80)
+                total_elapsed = time.perf_counter() - job_start_time
+                logger.info("🏁 JOB COMPLETED SUCCESSFULLY in %.2fs", total_elapsed)
+                logger.info("   Job ID: %s", job_id)
+                logger.info("   Filename: %s", job.audio_filename)
+                logger.info("=" * 80)
+                metrics.record_job_finished(success=True)
+            else:
+                logger.warning("⚠️  ANALYSIS INCOMPLETE OR PENDING")
+                logger.warning("   Status: %s", result.status)
+                logger.warning("   Error: %s", result.error)
+                await _save_job_results(db, job, result, audio_path)
 
         except Exception as e:
+            total_elapsed = time.perf_counter() - job_start_time
+            logger.error("=" * 80)
+            logger.error("❌ JOB FAILED after %.2fs", total_elapsed)
+            logger.error("   Error Type: %s", type(e).__name__)
+            logger.error("   Error Message: %s", str(e))
+            logger.error("=" * 80)
+            
             job.status = JobStatus.FAILED.value
             job.error = str(e)
             job.completed_at = datetime.utcnow()

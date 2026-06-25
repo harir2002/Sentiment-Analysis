@@ -92,20 +92,23 @@ async def _background_batch_worker(
             job_state = (status.job_state or "unknown").lower()
             elapsed = time.perf_counter() - worker_start
             logger.info(
-                "Sarvam batch %s state=%s elapsed=%.0fs",
+                "⏳ Sarvam Batch Status: job=%s, state=%s, elapsed=%.0fs",
                 batch_job_id,
                 job_state,
                 elapsed,
             )
 
             if job_state == "completed":
+                logger.info("✅ BATCH JOB COMPLETED: Fetching transcript...")
                 transcript, err = await fetch_batch_transcript(job)
                 stt_runtime = time.perf_counter() - worker_start
                 if err:
+                    logger.error("❌ Failed to fetch batch transcript: %s", err)
                     await _update_sarvam_providers(
                         comparison_job_id, audio_path, None, err, "failed"
                     )
                     return
+                logger.info("📝 Transcript fetched: length=%d chars", len(transcript or ""))
                 state.transcript = transcript
                 state.language_code = AUTO_DETECT_CODE
                 state.status = "completed"
@@ -113,9 +116,11 @@ async def _background_batch_worker(
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, transcript, None, "completed", stt_runtime
                 )
+                logger.info("✅ Batch worker completed successfully in %.2fs", stt_runtime)
                 return
 
             if job_state == "failed":
+                logger.error("❌ BATCH JOB FAILED")
                 err = "Sarvam batch job failed"
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, None, err, "failed"
@@ -126,6 +131,7 @@ async def _background_batch_worker(
                 not timed_out_marked
                 and elapsed >= settings.sarvam_batch_max_wait_seconds
             ):
+                logger.warning("⚠️  BATCH JOB TIMEOUT: Marked as timed_out after %.0fs", elapsed)
                 timed_out_marked = True
                 state.status = "timed_out"
                 state.pending_background = True
@@ -139,6 +145,7 @@ async def _background_batch_worker(
                 )
 
             if elapsed >= settings.sarvam_batch_absolute_max_seconds:
+                logger.error("❌ BATCH JOB EXCEEDED ABSOLUTE MAX WAIT: %.0fs", elapsed)
                 err = "Sarvam batch STT exceeded maximum wait time"
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, None, err, "failed"

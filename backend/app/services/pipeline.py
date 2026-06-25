@@ -223,23 +223,22 @@ async def run_full_pipeline(
     )
 
     pipeline_start = time.perf_counter()
+    logger.info("📍 Pipeline starting: solution=%s, stt=%s, llm=%s", solution.value, stt_name, llm_name)
 
     try:
         validate_audio_file(audio_path)
+        logger.info("   ✓ Audio file validated")
 
-        logger.info(
-            "Pipeline %s starting translate-to-English STT provider=%s",
-            solution.value,
-            stt_name,
-        )
-
+        logger.info("🔄 Starting STT (Speech-to-Text)...")
         stt_result = await transcribe(audio_path, stt_name, language_code=language_code)
         result = _apply_stt_pending(result, stt_result)
+        logger.info("   ✓ STT completed: status=%s, runtime=%.2fs", stt_result.status, stt_result.runtime_seconds or 0)
 
         if stt_result.status in {"queued", "running", "timed_out"} and (
             stt_result.pending_background or not stt_result.transcript.strip()
         ):
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
+            logger.info("   ⏳ STT still processing in background, returning pending result")
             return result
 
         if stt_result.error and stt_result.status not in {"timed_out", "rate_limited"}:
@@ -249,12 +248,14 @@ async def run_full_pipeline(
                 else stt_result.error
             )
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
+            logger.warning("   ❌ STT failed: %s", result.error)
             return result
 
         if not result.transcript.strip():
             result.status = "failed"
             result.error = ENGLISH_TRANSLATION_FAILED
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
+            logger.warning("   ❌ Empty transcript received")
             return result
 
         english_error = validate_english_transcript(result.transcript)
@@ -263,9 +264,11 @@ async def run_full_pipeline(
             result.error = english_error
             result.transcript = ""
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
+            logger.warning("   ❌ English validation failed: %s", english_error)
             return result
 
         result.transcript = normalize_english_transcript(result.transcript)
+        logger.info("   ✓ Transcript normalized, length=%d chars", len(result.transcript))
 
         guardrail_error = validate_transcript_for_analysis(
             result.transcript,
@@ -275,22 +278,36 @@ async def run_full_pipeline(
             result.status = "failed"
             result.error = guardrail_error
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
+            logger.warning("   ❌ Guardrail check failed: %s", guardrail_error)
             return result
 
+        logger.info("🤖 Starting LLM Analysis (sentiment, issues, actions)...")
         llm_result = await analyze_transcript(result.transcript, llm_name)
         result = _apply_llm_result(result, llm_result)
+        logger.info("   ✓ LLM analysis completed: status=%s, runtime=%.2fs", result.status, result.llm_runtime_seconds or 0)
+        
+        if result.analysis:
+            logger.info("   📈 Analysis Results:")
+            logger.info("      Sentiment: %s", result.analysis.sentiment)
+            logger.info("      Confidence: %.0f%%", result.analysis.confidence * 100)
+            logger.info("      Key Issues: %s", ", ".join(result.analysis.key_issues or ["None"]))
+
         result.total_runtime_seconds = time.perf_counter() - pipeline_start
+        logger.info("✅ Pipeline completed in %.2fs (STT: %.2fs, LLM: %.2fs)", 
+                   result.total_runtime_seconds,
+                   result.stt_runtime_seconds or 0,
+                   result.llm_runtime_seconds or 0)
         return result
 
     except AudioValidationError as e:
         result.status = "failed"
         result.error = str(e)
         result.total_runtime_seconds = time.perf_counter() - pipeline_start
-        logger.warning("Pipeline %s audio validation failed: %s", solution.value, e)
+        logger.warning("❌ Pipeline audio validation failed: %s", e)
         return result
     except Exception as e:
         result.status = "failed"
         result.error = GUARDRAIL_USER_ERROR if "guardrail" in str(e).lower() else str(e)
         result.total_runtime_seconds = time.perf_counter() - pipeline_start
-        logger.exception("Pipeline %s failed", solution.value)
+        logger.exception("❌ Pipeline exception: %s", str(e))
         return result
