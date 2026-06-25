@@ -113,10 +113,11 @@ async def _background_batch_worker(
                 state.language_code = AUTO_DETECT_CODE
                 state.status = "completed"
                 state.pending_background = False
+                logger.info("🤖 Starting LLM Analysis on background worker...")
                 await _update_sarvam_providers(
                     comparison_job_id, audio_path, transcript, None, "completed", stt_runtime
                 )
-                logger.info("✅ Batch worker completed successfully in %.2fs", stt_runtime)
+                logger.info("✅ Batch worker completed STT and LLM in %.2fs", stt_runtime)
                 return
 
             if job_state == "failed":
@@ -275,6 +276,15 @@ async def _update_sarvam_providers(
             result.total_runtime_seconds = (
                 result.stt_runtime_seconds + result.llm_runtime_seconds
             )
+            
+            logger.info("✅ LLM ANALYSIS COMPLETED (background worker)")
+            logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
+            if result.analysis:
+                logger.info("   Confidence: %.0f%%", result.analysis.confidence * 100)
+                logger.info("   Key Issues: %s", ", ".join(result.analysis.key_issues or []))
+                logger.info("   Recommended Action: %s", result.analysis.recommended_action or "N/A")
+            logger.info("   LLM Runtime: %.2fs", result.llm_runtime_seconds or 0)
+            logger.info("   Total (STT+LLM): %.2fs", result.total_runtime_seconds)
 
         # Single-solution mode: store first (primary) result only
         if results:

@@ -238,7 +238,8 @@ async def run_full_pipeline(
             stt_result.pending_background or not stt_result.transcript.strip()
         ):
             result.total_runtime_seconds = time.perf_counter() - pipeline_start
-            logger.info("   ⏳ STT still processing in background, returning pending result")
+            logger.info("   ⏳ STT still processing in background (batch mode), returning pending result")
+            logger.info("   ℹ️  Background worker will complete STT and run LLM analysis")
             return result
 
         if stt_result.error and stt_result.status not in {"timed_out", "rate_limited"}:
