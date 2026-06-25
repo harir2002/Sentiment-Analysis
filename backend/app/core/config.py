@@ -18,13 +18,14 @@ PLACEHOLDER_KEYS = {
 }
 
 # Sarvam LLM max_tokens caps by subscription tier (sarvam-30b).
-# Reduced to 2000 to prevent truncation (finish_reason=length)
+# Reduced to 1000 tokens to force concise JSON output and prevent truncation
+# (Lower limit = faster response, concise JSON = no finish_reason=length errors)
 SARVAM_LLM_TIER_MAX_TOKENS: dict[str, int] = {
-    "starter": 2000,
-    "growth": 4096,
-    "enterprise": 4096,
+    "starter": 1000,
+    "growth": 2000,
+    "enterprise": 3000,
 }
-SARVAM_LLM_DEFAULT_MAX_TOKENS = 2000
+SARVAM_LLM_DEFAULT_MAX_TOKENS = 1000
 
 
 class Settings(BaseSettings):
