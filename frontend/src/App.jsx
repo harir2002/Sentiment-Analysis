@@ -183,9 +183,6 @@ export default function App() {
           statusLabel={statusLabel}
           theme={theme}
           onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-          exportSlot={canExport ? (
-            <ExportSection jobId={job.job_id} compact />
-          ) : null}
         />
 
         <main className="main-content">
@@ -248,7 +245,6 @@ export default function App() {
                 audioFilename={job?.audio_filename || activeItem?.filename}
                 jobId={job?.job_id}
               />
-              {canExport && <ExportSection jobId={job.job_id} />}
             </>
           )}
         </main>
