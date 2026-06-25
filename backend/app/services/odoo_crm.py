@@ -327,25 +327,63 @@ class OdooCRMClient:
         """Make an XML-RPC call to Odoo."""
         try:
             import xmlrpc.client as xmlrpc
+            from socket import create_connection
 
-            # Use API endpoint if server_url is REST-based
+            # Custom transport with timeout support
+            class TimeoutHTTPSConnection(xmlrpc.client.HTTPSConnection):
+                def __init__(self, host, *args, timeout=None, **kwargs):
+                    self.timeout = timeout
+                    super().__init__(host, *args, **kwargs)
+
+                def connect(self):
+                    self.sock = create_connection((self.host, self.port), timeout=self.timeout)
+                    if self._tunnel_host:
+                        self._tunnel()
+                    self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
+
+            class TimeoutHTTPConnection(xmlrpc.client.HTTPConnection):
+                def __init__(self, host, *args, timeout=None, **kwargs):
+                    self.timeout = timeout
+                    super().__init__(host, *args, **kwargs)
+
+                def connect(self):
+                    self.sock = create_connection((self.host, self.port), timeout=self.timeout)
+                    if self._tunnel_host:
+                        self._tunnel()
+
+            class TimeoutTransport(xmlrpc.client.Transport):
+                def __init__(self, timeout=None, *args, **kwargs):
+                    self.timeout = timeout
+                    super().__init__(*args, **kwargs)
+
+                def make_connection(self, host):
+                    if self._connection and host == self._connection[0]:
+                        return self._connection[1]
+                    if self.use_https:
+                        conn = TimeoutHTTPSConnection(host, timeout=self.timeout)
+                    else:
+                        conn = TimeoutHTTPConnection(host, timeout=self.timeout)
+                    self._connection = (host, conn)
+                    return conn
+
+            # Construct URLs
             if self.server_url.startswith("https://") and "/api/" not in self.server_url:
-                # Assume XML-RPC endpoint
                 rpc_url = f"{self.server_url}/xmlrpc/2/object"
             else:
                 rpc_url = f"{self.server_url}/xmlrpc/2/object"
 
             common_url = f"{self.server_url}/xmlrpc/2/common"
 
-            # Authenticate
-            common = xmlrpc.ServerProxy(common_url, timeout=self.timeout)
+            # Create proxies with custom transport
+            transport = TimeoutTransport(timeout=self.timeout, use_https=True)
+            common = xmlrpc.ServerProxy(common_url, transport=transport)
             uid = common.authenticate(self.db_name, self.username, self.password, {})
 
             if not uid:
                 raise Exception("Odoo authentication failed")
 
             # Execute RPC call
-            models = xmlrpc.ServerProxy(rpc_url, timeout=self.timeout)
+            models = xmlrpc.ServerProxy(rpc_url, transport=transport)
             result = getattr(models, model).call(method, uid, self.password, *args, **kwargs)
 
             return result
