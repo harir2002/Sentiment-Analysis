@@ -256,13 +256,13 @@ async def _update_sarvam_providers(
                     )
                     result.status = "completed"
                     
-                    logger.info("[██████████████████████] 100% - Analysis Complete! (LLM took %.1fs)", llm_elapsed)
+                    logger.info(f"[██████████████████████] 100% - Analysis Complete! (LLM took {llm_elapsed:.1f}s)")
                     logger.info("✅ Results:")
-                    logger.info("   Sentiment: %s", result.analysis.sentiment if result.analysis else "N/A")
+                    logger.info(f"   Sentiment: {result.analysis.sentiment if result.analysis else 'N/A'}")
                     if result.analysis:
-                        logger.info("   Confidence: %.0f%%", result.analysis.confidence * 100)
-                        logger.info("   Key Issues: %s", ", ".join(result.analysis.key_issues or []))
-                        logger.info("   Recommended Action: %s", result.analysis.recommended_action or "N/A")
+                        logger.info(f"   Confidence: {result.analysis.confidence * 100:.0f}%")
+                        logger.info(f"   Key Issues: {', '.join(result.analysis.key_issues or [])}")
+                        logger.info(f"   Recommended Action: {result.analysis.recommended_action or 'N/A'}")
 
         # Store result in database
         job.result = result.model_dump()
