@@ -71,10 +71,17 @@ async def _background_batch_worker(
     timed_out_marked = False
     delay = settings.sarvam_batch_poll_interval
 
+    logger.info("=" * 80)
+    logger.info("🔄 BACKGROUND BATCH WORKER STARTED")
+    logger.info("   Job ID: %s", comparison_job_id)
+    logger.info("   Batch Job ID: %s", batch_job_id)
+    logger.info("   Audio Path: %s", audio_path)
+    logger.info("=" * 80)
+
     try:
         api_key = settings.require_sarvam_key()
     except ValueError as e:
-        logger.error("Sarvam batch worker missing API key: %s", e)
+        logger.error("❌ Sarvam batch worker missing API key: %s", e)
         return
 
     try:

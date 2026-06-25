@@ -84,7 +84,13 @@ async def _save_job_results(
     job.completed_at = datetime.utcnow()
     job.total_runtime_seconds = result.total_runtime_seconds
     
-    job.status = JobStatus.COMPLETED.value if result.status == "completed" else JobStatus.FAILED.value
+    # For background/pending results, keep status as RUNNING until batch completes
+    if result.status == "running" and result.pending_background:
+        job.status = JobStatus.RUNNING.value
+        logger.info("   ✓ Job queued for background processing (batch STT)")
+    else:
+        job.status = JobStatus.COMPLETED.value if result.status == "completed" else JobStatus.FAILED.value
+    
     await db.commit()
 
     await record_audit_event(
@@ -208,9 +214,13 @@ async def run_job_background(job_id: str):
                 logger.info("=" * 80)
                 metrics.record_job_finished(success=True)
             else:
-                logger.warning("⚠️  ANALYSIS INCOMPLETE OR PENDING")
-                logger.warning("   Status: %s", result.status)
-                logger.warning("   Error: %s", result.error)
+                logger.warning("=" * 80)
+                logger.warning("⏳ JOB QUEUED FOR BACKGROUND PROCESSING")
+                logger.warning("   Status: %s (batch STT still processing)", result.status)
+                logger.warning("   Job ID: %s", job_id)
+                logger.warning("   Filename: %s", job.audio_filename)
+                logger.warning("   Background worker will complete STT batch and LLM analysis")
+                logger.warning("=" * 80)
                 await _save_job_results(db, job, result, audio_path)
 
         except Exception as e:
