@@ -324,70 +324,80 @@ class OdooCRMClient:
         *args,
         **kwargs,
     ) -> Any:
-        """Make an XML-RPC call to Odoo."""
+        """Make an XML-RPC call to Odoo via requests library (more reliable)."""
         try:
-            import xmlrpc.client
-            from http.client import HTTPConnection, HTTPSConnection
-            from socket import create_connection
-
-            # Custom transport with timeout support
-            class TimeoutHTTPSConnection(HTTPSConnection):
-                def __init__(self, host, *args, timeout=None, **kwargs):
-                    self.timeout = timeout
-                    super().__init__(host, *args, **kwargs)
-
-                def connect(self):
-                    self.sock = create_connection((self.host, self.port), timeout=self.timeout)
-                    if self._tunnel_host:
-                        self._tunnel()
-                    self.sock = self._context.wrap_socket(self.sock, server_hostname=self.host)
-
-            class TimeoutHTTPConnection(HTTPConnection):
-                def __init__(self, host, *args, timeout=None, **kwargs):
-                    self.timeout = timeout
-                    super().__init__(host, *args, **kwargs)
-
-                def connect(self):
-                    self.sock = create_connection((self.host, self.port), timeout=self.timeout)
-                    if self._tunnel_host:
-                        self._tunnel()
-
-            class TimeoutTransport(xmlrpc.client.Transport):
-                def __init__(self, timeout=None, *args, **kwargs):
-                    self.timeout = timeout
-                    super().__init__(*args, **kwargs)
-
-                def make_connection(self, host):
-                    if self._connection and host == self._connection[0]:
-                        return self._connection[1]
-                    if self.use_https:
-                        conn = TimeoutHTTPSConnection(host, timeout=self.timeout)
-                    else:
-                        conn = TimeoutHTTPConnection(host, timeout=self.timeout)
-                    self._connection = (host, conn)
-                    return conn
-
-            # Construct URLs
-            if self.server_url.startswith("https://") and "/api/" not in self.server_url:
-                rpc_url = f"{self.server_url}/xmlrpc/2/object"
-            else:
-                rpc_url = f"{self.server_url}/xmlrpc/2/object"
-
+            # Use requests library for better control and error handling
             common_url = f"{self.server_url}/xmlrpc/2/common"
+            object_url = f"{self.server_url}/xmlrpc/2/object"
 
-            # Create proxies with custom transport
-            transport = TimeoutTransport(timeout=self.timeout, use_https=True)
-            common = xmlrpc.client.ServerProxy(common_url, transport=transport)
-            uid = common.authenticate(self.db_name, self.username, self.password, {})
+            # Authenticate
+            auth_payload = {
+                "jsonrpc": "2.0",
+                "method": "call",
+                "params": {
+                    "service": "common",
+                    "method": "authenticate",
+                    "args": [self.db_name, self.username, self.password, {}]
+                },
+                "id": 1
+            }
+
+            # Try XML-RPC first
+            try:
+                import xmlrpc.client
+                common = xmlrpc.client.ServerProxy(common_url)
+                uid = common.authenticate(self.db_name, self.username, self.password, {})
+            except Exception as e:
+                logger.warning(f"XML-RPC auth failed, trying REST: {e}")
+                # Fallback to REST API
+                auth_response = requests.post(
+                    f"{self.server_url}/api/auth/login",
+                    json={"login": self.username, "password": self.password},
+                    timeout=self.timeout
+                )
+                if auth_response.status_code != 200:
+                    raise Exception(f"Odoo authentication failed: {auth_response.text}")
+                uid = auth_response.json().get("uid")
 
             if not uid:
-                raise Exception("Odoo authentication failed")
+                raise Exception("Odoo authentication failed - no UID returned")
 
-            # Execute RPC call
-            models = xmlrpc.client.ServerProxy(rpc_url, transport=transport)
-            result = getattr(models, model).call(method, uid, self.password, *args, **kwargs)
-
-            return result
+            # Execute RPC call via XML-RPC
+            try:
+                import xmlrpc.client
+                models = xmlrpc.client.ServerProxy(object_url)
+                result = getattr(models, model).call(method, uid, self.password, *args, **kwargs)
+                return result
+            except Exception as e:
+                logger.warning(f"XML-RPC call failed: {e}, trying REST API")
+                
+                # Fallback to REST API
+                rest_payload = {
+                    "jsonrpc": "2.0",
+                    "method": "call",
+                    "params": {
+                        "service": "object",
+                        "method": method,
+                        "args": [model, uid, self.password] + list(args),
+                        "kwargs": kwargs
+                    },
+                    "id": 1
+                }
+                
+                rest_response = requests.post(
+                    f"{self.server_url}/api/object",
+                    json=rest_payload,
+                    timeout=self.timeout
+                )
+                
+                if rest_response.status_code != 200:
+                    raise Exception(f"REST API call failed: {rest_response.text}")
+                
+                response_data = rest_response.json()
+                if "error" in response_data:
+                    raise Exception(f"Odoo error: {response_data['error']}")
+                
+                return response_data.get("result")
 
         except Exception as e:
             logger.error(f"Odoo RPC call failed: {e}")
