@@ -85,7 +85,7 @@ async def _save_job_results(
     job.total_runtime_seconds = result.total_runtime_seconds
     
     # For background/pending results, keep status as RUNNING until batch completes
-    if result.status == "running" and result.pending_background:
+    if result.status == "running" and result.sarvam_batch_job_id:
         job.status = JobStatus.RUNNING.value
         logger.info("   ✓ Job queued for background processing (batch STT)")
     else:

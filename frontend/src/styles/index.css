@@ -767,6 +767,15 @@ input:focus-visible,
   font-weight: 500;
 }
 
+.processing-progress {
+  font-size: 0.85rem;
+  color: var(--color-accent);
+  margin-top: 0.75rem;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.5px;
+}
+
 /* ——— Results ——— */
 
 .results-layout {
