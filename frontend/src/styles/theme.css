@@ -1,0 +1,122 @@
+/**
+ * Dr. Mohan's brand palette — dark-first.
+ * Primary:   #000000
+ * Secondary: #e7000b  (restrained accent)
+ * Text:      #ffffff
+ */
+:root {
+  --font-family: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.65);
+
+  /* Brand core */
+  --color-primary: #000000;
+  --color-secondary: #e7000b;
+  --color-text-base: #ffffff;
+
+  /* Surfaces — black anchor + near-black layers */
+  --color-bg: #000000;
+  --color-bg-elevated: #0a0a0a;
+  --color-bg-subtle: #111111;
+  --color-bg-muted: #1a1a1a;
+  --color-surface: #0d0d0d;
+
+  /* Borders — derived from white on black */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Typography */
+  --color-text: #ffffff;
+  --color-text-secondary: rgba(255, 255, 255, 0.88);
+  --color-text-muted: rgba(255, 255, 255, 0.62);
+  --color-text-faint: rgba(255, 255, 255, 0.42);
+
+  /* Accent — secondary red, highlights only */
+  --color-accent: #e7000b;
+  --color-accent-hover: #ff1a24;
+  --color-accent-soft: rgba(231, 0, 11, 0.12);
+  --color-accent-border: rgba(231, 0, 11, 0.38);
+  --color-text-on-accent: #ffffff;
+
+  /* Semantic — derived from brand (no unrelated hues) */
+  --color-success: #ffffff;
+  --color-success-bg: rgba(255, 255, 255, 0.08);
+  --color-success-border: rgba(255, 255, 255, 0.2);
+
+  --color-warning: rgba(255, 255, 255, 0.92);
+  --color-warning-bg: rgba(255, 255, 255, 0.06);
+  --color-warning-border: rgba(255, 255, 255, 0.16);
+
+  --color-danger: #e7000b;
+  --color-danger-bg: rgba(231, 0, 11, 0.12);
+  --color-danger-border: rgba(231, 0, 11, 0.38);
+
+  --color-info: rgba(255, 255, 255, 0.9);
+  --color-info-bg: rgba(255, 255, 255, 0.06);
+  --color-info-border: rgba(255, 255, 255, 0.14);
+
+  /* Sentiment — red only where meaningful */
+  --color-sentiment-positive-bg: rgba(255, 255, 255, 0.1);
+  --color-sentiment-positive-text: #ffffff;
+  --color-sentiment-negative-bg: rgba(231, 0, 11, 0.14);
+  --color-sentiment-negative-text: #ff4d57;
+  --color-sentiment-neutral-bg: rgba(255, 255, 255, 0.06);
+  --color-sentiment-neutral-text: rgba(255, 255, 255, 0.78);
+  --color-sentiment-mixed-bg: rgba(255, 255, 255, 0.08);
+  --color-sentiment-mixed-text: rgba(255, 255, 255, 0.88);
+
+  /* Legacy aliases */
+  --bg: var(--color-bg);
+  --bg-elevated: var(--color-bg-elevated);
+  --bg-card: var(--color-surface);
+  --border: var(--color-border);
+  --text: var(--color-text);
+  --text-muted: var(--color-text-muted);
+  --accent: var(--color-accent);
+  --accent-soft: var(--color-accent-soft);
+  --danger: var(--color-danger);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --surface: var(--color-surface);
+
+  --color-secondary-hover: var(--color-accent-hover);
+  --color-secondary-soft: var(--color-accent-soft);
+  --color-secondary-muted: var(--color-accent-border);
+  --color-secondary-border: var(--color-accent-border);
+  --color-secondary-surface: var(--color-accent-soft);
+  --color-text-on-secondary: var(--color-text-on-accent);
+  --color-primary-elevated: var(--color-bg-elevated);
+  --color-primary-card: var(--color-surface);
+  --color-overlay: rgba(255, 255, 255, 0.03);
+  --color-overlay-strong: rgba(255, 255, 255, 0.06);
+  --color-danger-bg: var(--color-danger-bg);
+  --color-danger-border: var(--color-danger-border);
+  --color-success-bg: var(--color-success-bg);
+  --color-success-border: var(--color-success-border);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-warning-border: var(--color-warning-border);
+  --color-info-bg: var(--color-info-bg);
+  --color-info-border: var(--color-info-border);
+  --color-winner: var(--color-accent);
+  --color-winner-bg: var(--color-accent-soft);
+  --color-winner-border: var(--color-accent-border);
+}
+
+/* Optional elevated contrast mode — same identity, slightly lifted panels */
+[data-theme='light'] {
+  --color-bg: #0a0a0a;
+  --color-bg-elevated: #111111;
+  --color-bg-subtle: #161616;
+  --color-bg-muted: #1f1f1f;
+  --color-surface: #121212;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-strong: rgba(255, 255, 255, 0.22);
+}

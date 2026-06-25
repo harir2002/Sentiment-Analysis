@@ -1,0 +1,32 @@
+# Scoring weights for solution comparison (must sum to 1.0)
+weights:
+  stt_quality: 0.25
+  llm_analysis_quality: 0.25
+  latency: 0.15
+  cost: 0.10
+  indian_language_suitability: 0.15
+  compliance_control: 0.10
+
+# Cost estimates per minute of audio (USD, approximate)
+cost_per_minute:
+  sarvam_stt: 0.008
+  sarvam_llm: 0.003
+  groq_whisper: 0.005
+  openrouter_gemma: 0.003
+
+# Latency benchmarks in seconds (used for normalization)
+latency_benchmark_seconds: 30
+
+# Indian language suitability by provider (0-1 scale)
+indian_language_scores:
+  sarvam_stt: 0.95
+  sarvam_llm: 0.90
+  groq_whisper: 0.70
+  openrouter_gemma: 0.65
+
+# Compliance/control scores (data residency, enterprise controls)
+compliance_scores:
+  sarvam_stt: 0.90
+  sarvam_llm: 0.90
+  groq_whisper: 0.60
+  openrouter_gemma: 0.55
